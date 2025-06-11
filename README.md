@@ -1,6 +1,6 @@
 # Ansible Docker VM Setup
 
-A quick automated way to set up a virtual machine with Docker using Ansible, perfect for CI/CD environments.
+Quick Ansible playbook to set up a VM with Docker.
 
 ## Commands
 
