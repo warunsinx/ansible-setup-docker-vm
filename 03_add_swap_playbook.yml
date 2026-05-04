@@ -1,0 +1,46 @@
+- name: Add swap file on small VM (1GB RAM)
+  hosts: virtualmachines
+  become: true
+  vars:
+    swap_file_path: /swapfile
+    # 2G balances OOM pressure vs disk; override with -e swap_size_mb=1024 if you prefer 1:1 with RAM
+    swap_size_mb: 2048
+  tasks:
+    - name: Create swap file
+      ansible.builtin.command: fallocate -l {{ swap_size_mb }}M {{ swap_file_path }}
+      args:
+        creates: "{{ swap_file_path }}"
+
+    - name: Restrict swap file permissions
+      ansible.builtin.file:
+        path: "{{ swap_file_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Detect swap file type
+      ansible.builtin.command: file -b {{ swap_file_path }}
+      register: swap_file_magic
+      changed_when: false
+
+    - name: Initialize swap area
+      ansible.builtin.command: mkswap {{ swap_file_path }}
+      when: "'swap' not in swap_file_magic.stdout | lower"
+
+    - name: Ensure swap is listed in fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^{{ swap_file_path | regex_escape }}\s'
+        line: "{{ swap_file_path }} none swap sw 0 0"
+        create: false
+        mode: "0644"
+
+    - name: Check if swap file is already active
+      ansible.builtin.command: grep -qF -- '{{ swap_file_path }}' /proc/swaps
+      register: swap_already_on
+      changed_when: false
+      failed_when: false
+
+    - name: Activate swap
+      ansible.builtin.command: swapon {{ swap_file_path }}
+      when: swap_already_on.rc != 0
